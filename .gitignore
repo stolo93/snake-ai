@@ -1,0 +1,11 @@
+#Python files
+venv
+__pycache__
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE files
+.idea
+.vscode
+
