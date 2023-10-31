@@ -26,13 +26,13 @@ BLUE2 = (0, 100, 255)
 BLACK = (0, 0, 0)
 
 BLOCK_SIZE = 20
-SPEED = 12
 
 
 class SnakeGame:
-    def __init__(self, w: int = 640, h: int = 480):
+    def __init__(self, w: int = 640, h: int = 480, initial_speed: float = 12.0):
         self.w = w
         self.h = h
+        self.speed = initial_speed
 
         # Init display
         self.display = pygame.display.set_mode((self.w, self.h))
@@ -60,7 +60,6 @@ class SnakeGame:
             self._place_food()
 
     def play_step(self):
-        global SPEED
         # Collect user input
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -89,14 +88,14 @@ class SnakeGame:
         # Place new food or just move
         if self.head == self.food:
             self.score += 1
-            SPEED += 0.05 * SPEED
+            self.speed += 0.05 * self.speed
             self._place_food()
         else:
             self.snake.pop()  # If snake did not eat food remove last point
 
         # Update UI and clock
         self._update_ui()
-        self.clock.tick(SPEED)
+        self.clock.tick(self.speed)
 
         # Return game over and clock
         return game_over, self.score
@@ -155,15 +154,108 @@ class SnakeGame:
             return False
 
 
+class SnakeGameAI(SnakeGame):
+    def __init__(self, w: int = 640, h: int = 480, initial_speed: float = 12):
+        super().__init__(w, h, initial_speed)
+        self.frame_iteration = 0
+
+    def reset(self):
+        self.__init__(self.w, self.h, self.speed)
+
+    def play_step(self, action):
+        self.frame_iteration += 1
+        # Collect user input
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+
+        # Move snake (append new head in the correct direction
+        self._move(action)
+        self.snake.insert(0, self.head)
+
+        reward = 0
+        # Check for game over
+        game_over = False
+        if self._is_collision() or self.frame_iteration > 100 * len(self.snake):
+            reward = -10
+            game_over = True
+            return reward, game_over, self.score
+
+        # Place new food or just move
+        if self.head == self.food:
+            reward = 10
+            self.score += 1
+            self.speed += 0.05 * self.speed
+            self._place_food()
+        else:
+            self.snake.pop()  # If snake did not eat food remove last point
+
+        # Update UI and clock
+        self._update_ui()
+        self.clock.tick(self.speed)
+
+        # Return game over and clock
+        return reward, game_over, self.score
+
+    def _move(self, action):
+        # [straight, right turn, left turn]
+
+        clock_wise = [Direction.RIGHT, Direction.DOWN, Direction.LEFT, Direction.UP]
+        idx = clock_wise.index(self.direction)
+
+        new_direction = self.direction
+        if action[0]:
+            new_direction = clock_wise[idx]  # No change
+        elif action[1]:
+            new_direction = clock_wise[(idx + 1) % len(clock_wise)]  # Clock wise rotation
+        elif action[2]:
+            new_direction = clock_wise[(idx - 1) % len(clock_wise)]  # Anti clock wise rotation
+
+        self.direction = new_direction
+
+        x = self.head.x
+        y = self.head.y
+
+        if self.direction == Direction.RIGHT:
+            x += BLOCK_SIZE
+        if self.direction == Direction.LEFT:
+            x -= BLOCK_SIZE
+        if self.direction == Direction.DOWN:
+            y += BLOCK_SIZE
+        if self.direction == Direction.UP:
+            y -= BLOCK_SIZE
+
+        self.head = Point(x, y)
+
+    def _is_collision(self, pt: Point | None = None):
+        if pt is None:
+            pt = self.head
+
+        # Collision with boundaries
+        if pt.x > self.w - BLOCK_SIZE or pt.x < 0 or pt.y > self.h - BLOCK_SIZE or pt.y < 0:
+            return True
+        # Collision with self
+        if pt in self.snake[1:]:
+            return True
+
+        return False
+
+
 if __name__ == '__main__':
-    game = SnakeGame(1280, 720)
+    game = SnakeGameAI(1280, 720)
+    actions = [
+        [1, 0, 0],  # No direction change
+        [0, 1, 0],  # Right turn
+        [0, 0, 1]   # Left turn
+    ]
 
     while True:
-        game_over, score = game.play_step()
+        action_idx = random.randint(0, len(actions) - 1)
+        reward, game_over, score = game.play_step(actions[action_idx])
 
         if game_over:
             break
 
     print(f'Final score {score}')
-
     pygame.quit()
